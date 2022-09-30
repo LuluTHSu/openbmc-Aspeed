@@ -1,0 +1,104 @@
+From 52c0545bf02d70f62494835f39849be8d7ce5ec8 Mon Sep 17 00:00:00 2001
+From: lulusu <Lulu_Su@wistron.com>
+Date: Fri, 30 Sep 2022 05:54:19 +0000
+Subject: [PATCH] fix verify error if block1/b0_sig/hashalg set to sha384
+
+ref this PR: Intel-BMC/intel-pfr-signing-utility#2
+
+https://github.com/Intel-BMC/intel-pfr-signing-utility/pull/2/commits/1f5529f365c70eedb1a43c7af3f09d7fcfe00068
+
+Signed-off-by: lulusu <Lulu_Su@wistron.com>
+---
+ blocksign.c | 70 +++++++++++++++++++++++++++++++++++++----------------
+ 1 file changed, 49 insertions(+), 21 deletions(-)
+
+diff --git a/blocksign.c b/blocksign.c
+index ecb6fa8..ffe48bf 100644
+--- a/blocksign.c
++++ b/blocksign.c
+@@ -326,33 +326,61 @@ int parseBlocks(ARGUMENTS *args)
+                 hexDump(b0.sha256, 32, "  ", stdout, getNfo());
+                 printf("%s\n", getNfo());
+ 
+-                // Calculate hash sha256
+-                HashFilePointer(fp, Sha256, &hash, &hashLen);
+-                printf("%sPC Calculated SHA256:\n", getNfo());
+-                hexDump(hash, hashLen, "  ", stdout, getNfo());
+-                printf("%s\n", getNfo());
+-                fseek(fp, pos, SEEK_SET);
+-                for (i = 0; i < 32 && i < hashLen; ++i)
++                if (args->b1_args.b0sig.hashalg == TPM_ALG_SHA256)
+                 {
+-                    if (hash[i] != b0.sha256[i])
++                    // Calculate hash sha256
++                    HashFilePointer(fp, Sha256, &hash, &hashLen);
++                    printf("%sPC Calculated SHA256:\n", getNfo());
++                    hexDump(hash, hashLen, "  ", stdout, getNfo());
++                    printf("%s\n", getNfo());
++                    fseek(fp, pos, SEEK_SET);
++                    for (i = 0; i < 32 && i < hashLen; ++i)
+                     {
+-                        fprintf(stderr,
+-                                "%s%s%s  *** Block 0 SHA256 does not match "
+-                                "calculated value ***%s\n",
+-                                getErr(), setAttribute(Bold), setAttribute(Red),
+-                                setAttribute(Clear));
+-                        i = 255;
++                        if (hash[i] != b0.sha256[i])
++                        {
++                            fprintf(stderr,
++                                    "%s%s%s  *** Block 0 SHA256 does not match "
++                                    "calculated value ***%s\n",
++                                    getErr(), setAttribute(Bold), setAttribute(Red),
++                                    setAttribute(Clear));
++                            i = 255;
++                        }
+                     }
+-                }
+ 
+-                if (i == hashLen)
++                    if (i == hashLen)
++                    {
++                        printf("%s%s%s*** Block 0 SHA256 matches calculated value "
++                            "***%s\n",
++                            getNfo(), setAttribute(Bold), setAttribute(Green),
++                            setAttribute(Clear));
++                    }
++                    printf("%s\n", getNfo());
++                }
++                else
+                 {
+-                    printf("%s%s%s*** Block 0 SHA256 matches calculated value "
+-                           "***%s\n",
+-                           getNfo(), setAttribute(Bold), setAttribute(Green),
+-                           setAttribute(Clear));
++                    for (i = 0; i < 32; ++i)
++                    {
++                        if (PAD_HASH != b0.sha256[i])
++                        {
++                            fprintf(stderr,
++                                    "%s%s%s  *** Block 0 SHA256 does not match "
++                                    "pad hash ***%s\n",
++                                    getErr(), setAttribute(Bold), setAttribute(Red),
++                                    setAttribute(Clear));
++                            i = 255;
++                        }
++                    }
++
++                    if (i == 32)
++                    {
++                        printf("%s%s%s*** Block 0 SHA256 matches pad hash "
++                               "***%s\n",
++                               getNfo(), setAttribute(Bold), setAttribute(Green),
++                               setAttribute(Clear));
++                    }
++                    printf("%s\n", getNfo());
+                 }
+-                printf("%s\n", getNfo());
++
+                 if (hash != NULL)
+                 {
+                     free(hash);
+-- 
+2.25.1
+
